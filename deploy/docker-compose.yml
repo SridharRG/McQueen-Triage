@@ -1,0 +1,71 @@
+# McQueen on regere-yotta, next to new-app-dev / new-platform-dev.
+#
+#   cd ~/McQueen-Triage/deploy && cp mcqueen.env.example mcqueen.env   # fill in the key(s)
+#   ./sync-repos.sh                                      # read-only clones for code context
+#   docker compose up -d --build
+#
+# Nothing here writes to the watched stacks:
+# - the Docker API goes through a socket proxy that only allows GET on
+#   /containers, /events, /_ping and /version (no exec, no start/stop);
+# - repos and schema packages are mounted read-only;
+# - DB schema comes from core's GET /api/v1/config/packages, never from Postgres.
+
+services:
+  mcqueen-docker-proxy:
+    image: tecnativa/docker-socket-proxy:v0.4.1
+    container_name: mcqueen-docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1   # /containers/json, /containers/{id}/logs (GET only)
+      EVENTS: 1       # /events: container start/die/oom
+      PING: 1
+      VERSION: 1
+      POST: 0         # refuse every write
+      INFO: 0
+      IMAGES: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      EXEC: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - mcqueen_internal
+
+  mcqueen:
+    image: ${MCQUEEN_IMAGE:-ghcr.io/regere-ai/mcqueen-triage:latest}
+    build:
+      context: ..
+    container_name: mcqueen
+    restart: unless-stopped
+    depends_on:
+      - mcqueen-docker-proxy
+    ports:
+      - "127.0.0.1:3028:3028"   # Caddy: triage.regere.ai → localhost:3028
+    env_file:
+      - mcqueen.env
+    environment:
+      DOCKER_HOST: tcp://mcqueen-docker-proxy:2375
+      REPOS_DIR: /repos
+      SCHEMA_DIR: /schema
+      DATABASE_PATH: /data/mcqueen.db
+      MCQUEEN_CONFIG: /app/mcqueen.toml
+      # Live schema from core over the app network (read-only endpoint).
+      CORE_PACKAGES_URL: ${CORE_PACKAGES_URL:-http://dev_core:5000/api/v1/config/packages}
+    volumes:
+      - mcqueen_data:/data
+      - ./repos:/repos:ro
+      - ./schema:/schema:ro
+      - ../mcqueen.toml:/app/mcqueen.toml:ro
+    networks:
+      - mcqueen_internal
+      - new_app_network   # to reach dev_core for /config/packages
+
+volumes:
+  mcqueen_data:
+
+networks:
+  mcqueen_internal:
+    name: mcqueen_internal
+  new_app_network:
+    external: true
+    name: new_app_network

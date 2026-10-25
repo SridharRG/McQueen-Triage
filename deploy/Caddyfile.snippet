@@ -1,0 +1,23 @@
+# McQueen triage UI + API. Add to yotta-infra/Caddyfile, then `make caddy`.
+# The browser SDK posts to /api/ingest/frontend from other origins, so that path
+# (and the health probe) skip basic auth; McQueen checks INGEST_KEY + CORS itself.
+#
+# Password hash: caddy hash-password --plaintext '<password>'
+triage.regere.ai {
+	encode zstd gzip
+
+	@public path /api/ingest/* /api/health
+	handle @public {
+		reverse_proxy localhost:3028
+	}
+
+	handle {
+		basic_auth {
+			regere <bcrypt-hash>
+		}
+		# flush_interval -1 keeps the live log tail and incident updates (SSE) streaming.
+		reverse_proxy localhost:3028 {
+			flush_interval -1
+		}
+	}
+}

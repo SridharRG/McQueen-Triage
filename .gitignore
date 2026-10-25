@@ -1,0 +1,11 @@
+target/
+.env
+/data/
+web/node_modules/
+web/dist/
+*.db
+*.db-*
+deploy/mcqueen.env
+deploy/repos/
+deploy/schema/
+.claude/

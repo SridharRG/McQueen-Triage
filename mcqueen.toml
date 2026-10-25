@@ -1,0 +1,175 @@
+# McQueen service catalog for regere-yotta (new-app-dev + new-platform-dev).
+#
+# - containers: exact names, or prefixes ending in `*`
+# - hosts:      names other services use in URLs / proxy slugs (pf-message-flow, authrs…)
+# - repo:       directory under REPOS_DIR with the service's source (read-only mount)
+# - layer:      app | platform | frontend | infra  (infra never opens incidents on its own)
+
+[docker]
+compose_projects = ["new-app-dev", "new-platform-dev"]
+exclude_names = [
+  "new-app-dev-redis-new-*",
+  "new-platform-dev-pf-redis-*",
+]
+
+[detection]
+# WARN lines containing any of these (case-insensitive) count as errors.
+warn_as_error = [
+  "upstream error",
+  "connection refused",
+  "timed out",
+  "timeout",
+  "panicked",
+  "internal server error",
+  "permission denied",
+  "not found in registry",
+  "failed",
+]
+# Never open incidents for lines containing these.
+ignore = [
+  "TEMP health check",
+  "token may be invalid or expired",
+  "GW_ADMIN_PASSWORD is still set",
+]
+
+# ── app layer (new-app-dev) ─────────────────────────────────────────────────
+
+[[services]]
+name = "client-ui-next"
+containers = ["dev_client-ui-next"]
+layer = "frontend"
+repo = "client-ui-next"
+hosts = ["client-ui-next", "dev_client-ui-next"]
+description = "Next.js frontend served under /ui/app1; calls launchpad from the browser."
+owner = "frontend"
+
+[[services]]
+name = "launchpad"
+containers = ["dev_launchpad"]
+layer = "app"
+repo = "launchpad"
+hosts = ["launchpad", "dev_launchpad", "launchpad-headless-dev.regere.ai"]
+description = "Edge gateway: resolves the session via authrs, sets X-User-ID, proxies /proxy/<slug>/… to registered services. Originates traceparent."
+owner = "platform"
+
+[[services]]
+name = "authrs"
+containers = ["dev_authrs"]
+layer = "app"
+repo = "authrs"
+hosts = ["authrs", "dev_authrs"]
+description = "Auth: sessions, users, roles, Cedar permission checks (/admin/permissions/check)."
+owner = "platform"
+
+[[services]]
+name = "core"
+containers = ["dev_core"]
+layer = "app"
+repo = "architect-sdk"
+hosts = ["core", "dev_core"]
+description = "service-kit on architect-sdk: config-driven REST over the installed Postgres packages (siemens, manufacturing_*, jobq), job queue worker, calls workflow-engine and decision-hub."
+owner = "core"
+
+[[services]]
+name = "workflow-engine"
+containers = ["new-app-dev-workflow_engine-*", "dev_workflow_engine"]
+layer = "app"
+repo = "workflow-engine"
+hosts = ["workflow_engine", "workflow-engine"]
+description = "Workflow executor (webhook-triggered, JMESPath expressions, service calls)."
+owner = "core"
+
+[[services]]
+name = "load-dispatch"
+containers = ["load-dispatch", "dev_load-dispatch", "pf-load-dispatch"]
+layer = "app"
+repo = "load-dispatch"
+hosts = ["load-dispatch"]
+description = "Packing solver / load dispatch API."
+
+# ── platform layer (new-platform-dev) ───────────────────────────────────────
+
+[[services]]
+name = "decision-hub"
+containers = ["pf-decision-hub"]
+layer = "platform"
+repo = "decision-hub"
+hosts = ["pf-decision-hub", "decision-hub"]
+description = "Rules engine: evaluates rulesets on events, fires actions (HTTP, workflows) via RabbitMQ workers."
+owner = "platform"
+
+[[services]]
+name = "message-flow"
+containers = ["pf-message-flow"]
+layer = "platform"
+repo = "message-flow"
+hosts = ["pf-message-flow", "message-flow"]
+description = "Notifications: email, in-app inbox, push, realtime via sockudo."
+owner = "platform"
+
+[[services]]
+name = "load-optimizer"
+containers = ["pf-load-optimizer"]
+layer = "platform"
+repo = "load-optimizer"
+hosts = ["pf-load-optimizer", "load-optimizer"]
+description = "TU load optimiser (packing, CG validation)."
+
+[[services]]
+name = "yard-recom"
+containers = ["pf-yard-recom-v2"]
+layer = "platform"
+repo = "yard-recom"
+hosts = ["pf-yard-recom", "pf-yard-recom-v2", "yard-recom"]
+description = "Yard recommendation service."
+
+[[services]]
+name = "simulation"
+containers = ["pf-simulation-service", "pf-simulation-worker-*"]
+layer = "platform"
+repo = "simulation-service-v2"
+hosts = ["pf-simulation-service", "simulation"]
+description = "Simulation API + SQS workers (Python)."
+
+[[services]]
+name = "common-services"
+containers = ["pf-common-services"]
+layer = "platform"
+repo = "common-services"
+hosts = ["pf-common-services", "common-service", "common-services"]
+description = "Shared utilities: email, file storage, PDF rendering."
+
+[[services]]
+name = "platform-gw"
+containers = ["pf-platform-gw"]
+layer = "platform"
+repo = "platform-gw"
+hosts = ["pf-platform-gw", "platform-gw"]
+description = "API gateway for external clients (API key → X-Tenant-ID)."
+
+[[services]]
+name = "sockudo"
+containers = ["pf-sockudo"]
+layer = "infra"
+hosts = ["pf-sockudo", "socket"]
+description = "Pusher-compatible realtime websocket server."
+
+# ── data layer: context only ────────────────────────────────────────────────
+
+[[services]]
+name = "postgres"
+containers = ["new-app-dev-postgres-*"]
+layer = "infra"
+hosts = ["postgres"]
+
+[[services]]
+name = "pf-postgres"
+containers = ["new-platform-dev-pf-postgres-*"]
+layer = "infra"
+hosts = ["pf-postgres"]
+
+[[services]]
+name = "rabbitmq"
+containers = ["new-platform-dev-pf-rabbitmq-*"]
+layer = "infra"
+hosts = ["pf-rabbitmq"]
